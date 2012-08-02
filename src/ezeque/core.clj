@@ -1,28 +1,42 @@
-(ns ezeque.core)
+(ns ezeque.core
+  (:require [ezeque.ipc :as ipc]))
 
 (def promises (atom (repeatedly promise)))
-(defn raise! [event]
+
+(defn deliver! [event]
   (swap! promises (fn [p] (deliver (first p) event) (drop 1 p))) event)
 
+(defn raise [event]
+  (ipc/send-out (pr-str event)))
+
 (defn event-stream "create a (blocking) event stream as a lazy-seq"
-  ([] (map deref (seque @promises)))
-  ([term] (take-while (complement term) (event-stream)))
-  ([t v] (map #(deref % t v) (seque @promises)))
-  ([t v term] (take-while (complement term) (event-stream t v)))
+  ([]
+     (map deref (seque @promises)))
+  ([terminator]
+     (take-while (complement terminator) (event-stream)))
+  ([timeout-ms timeout-value]
+     (map #(deref % timeout-ms timeout-value) (seque @promises)))
+  ([timeout-ms timeout-value terminator]
+     (take-while (complement terminator) (event-stream timeout-ms timeout-value)))
   )
 
+(defn start-comms [incoming outgoing]
+  (ipc/start (or incoming ["tcp://*:5555"]) (or outgoing ["tcp://localhost:5555"]) deliver!))
+
+(defn stop-comms []
+  (ipc/stop))
 
 (comment
   ;; producers
   ;; could hook up producers to zeromq for inter process event-processing.
   
-  ;; consumers
+  ;; event consumers each need their own thread 
   ;; can be written using standard seq lib
 
   ;; with a timeout specified the consumer can get ahead of producer -
-  ;; but thats as expected - nth is allowed too.
+  ;; but thats expected - eg nth is allowed too.
 
-  ;; overall timeout could be via future-cancel
+  ;; an overall timeout of event processing could be via future-cancel
   
 (future (doseq [e (take 10 (event-stream 10000 "x"))] (println "stream1: " e))
         (println "stream1 done."))
