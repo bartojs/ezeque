@@ -20,11 +20,20 @@
      (take-while (complement terminator) (event-stream timeout-ms timeout-value)))
   )
 
-(defn start-comms [incoming outgoing]
-  (ipc/start (or incoming ["tcp://*:5555"]) (or outgoing ["tcp://localhost:5555"]) deliver!))
+(defn start-comms
+  ([incoming outgoing]
+     (ipc/start (or incoming ["tcp://*:5555"]) (or outgoing ["tcp://localhost:5555"]) deliver!))
+  ([]
+     (start-comms nil nil))
+  )
 
 (defn stop-comms []
-  (ipc/stop))
+    (ipc/stop))
+
+;; TEMP for repl
+(defn -main [& args]
+  (start-comms))
+
 
 (comment
   ;; producers
