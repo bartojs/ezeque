@@ -54,8 +54,9 @@
     (try
       (let [sock (ipc/socket @zctx :PUB binds)]
         (try
-          (doseq [e (outstream :quit)] ;; blocks
-            (ipc/send sock (pr-str e)))
+          (doseq [ev (outstream :quit)] ;; blocks
+            (println "outstream send " ev)
+            (ipc/send sock (pr-str ev)))
           (finally
             (ipc/close sock :PUB binds))
           )
@@ -66,9 +67,11 @@
   (ipc/destroy @zctx))
 
 (defn start [binds connects]
-  ;(stop)
+  (stop)
   (reset! zctx (ipc/context))
-  (start-incoming connects)
+  
+  (when (seq connects) (start-incoming connects))
+  (when (seq binds) (start-outgoing binds))
   )
 
 
