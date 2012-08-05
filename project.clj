@@ -5,7 +5,7 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.4.0"]
                  [net.java.dev.jna/jna "3.4.0"]]
-  :jvm-opts ["-Xdebug"
-             "-Xrunjdwp:transport=dt_socket,server=y,suspend=n"
+  :jvm-opts [;"-Xdebug"
+             ;"-Xrunjdwp:transport=dt_socket,server=y,suspend=n"
              "-Djna.library.path=/usr/local/lib"]
   :main ezeque.core)

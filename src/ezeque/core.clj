@@ -1,38 +1,75 @@
 (ns ezeque.core
   (:require [ezeque.ipc :as ipc]))
 
-(def promises (atom (repeatedly promise)))
-
-(defn deliver! [event]
-  (swap! promises (fn [p] (deliver (first p) event) (drop 1 p))) event)
+(def streams {:incoming (atom (repeatedly promise))
+              :outgoing (atom (repeatedly promise))})
+  
+(defn deliver!
+  ([promises event]
+     (swap! promises (fn [p] (deliver (first p) event) (drop 1 p))) event)
+  ([event]
+     (deliver! (:incoming streams) event)))
 
 (defn raise [event]
-  (ipc/send-out (pr-str event)))
+  (deliver! (:outgoing streams) event))
 
 (defn event-stream "create a (blocking) event stream as a lazy-seq"
-  ([]
+  ([promises]
      (map deref (seque @promises)))
-  ([terminator]
-     (take-while (complement terminator) (event-stream)))
-  ([timeout-ms timeout-value]
+  ([promises terminator]
+     (take-while (complement terminator) (event-stream promises)))
+  ([promises timeout-ms timeout-value]
      (map #(deref % timeout-ms timeout-value) (seque @promises)))
-  ([timeout-ms timeout-value terminator]
-     (take-while (complement terminator) (event-stream timeout-ms timeout-value)))
+  ([promises timeout-ms timeout-value terminator]
+     (take-while (complement terminator) (event-stream promises timeout-ms timeout-value))))
+
+(def instream (partial event-stream (:incoming streams)))
+(def outstream (partial event-stream (:outgoing streams)))
+
+(def zctx (atom nil))
+
+(defn- start-incoming [connects]
+  (println "start-incoming")
+   (future
+     (try 
+      (let [sock (ipc/socket @zctx :SUB connects)
+            process (fn []
+                      (println "incoming process().")
+                      (let [s (ipc/recv sock)] 
+                        (when-not (or (nil? s) (empty? (.trim s)) (= s ":quit"))
+                          (println (str "RECV incoming: '" s "'"))                              
+                          (deliver! (read-string s))
+                          true)))]
+        (try
+         (while (process) (println "RECV listening..."))
+         (finally (ipc/close sock :SUB connects))) 
+        (println "incoming stopped.")
+        )
+      (catch Exception e (println "Error in socket :SUB " (pr-str connects) e)))))
+
+(defn- start-outgoing [binds]
+  ;; could wait until first send was made before creating a future
+  (println "start-outgoing")
+  (future
+    (try
+      (let [sock (ipc/socket @zctx :PUB binds)]
+        (try
+          (doseq [e (outstream :quit)] ;; blocks
+            (ipc/send sock (pr-str e)))
+          (finally
+            (ipc/close sock :PUB binds))
+          )
+       (println "outgoing stopped."))
+     (catch Exception e (println "Error in socket :PUB " (pr-str binds) e)))))
+
+(defn stop []
+  (ipc/destroy @zctx))
+
+(defn start [binds connects]
+  ;(stop)
+  (reset! zctx (ipc/context))
+  (start-incoming connects)
   )
-
-(defn start-comms
-  ([incoming outgoing]
-     (ipc/start (or incoming ["tcp://*:5555"]) (or outgoing ["tcp://localhost:5555"]) deliver!))
-  ([]
-     (start-comms nil nil))
-  )
-
-(defn stop-comms []
-    (ipc/stop))
-
-;; TEMP for repl
-(defn -main [& args]
-  (start-comms))
 
 
 (comment
@@ -47,17 +84,17 @@
 
   ;; an overall timeout of event processing could be via future-cancel
   
-(future (doseq [e (take 10 (event-stream 10000 "x"))] (println "stream1: " e))
+(future (doseq [e (take 10 (instream 10000 "x"))] (println "stream1: " e))
         (println "stream1 done."))
 
-(future (doseq [e (take 10 (event-stream 10000 "x" #(= % "bla")))] (println "stream2: " e))
+(future (doseq [e (take 10 (instream 10000 "x" #(= % "bla")))] (println "stream2: " e))
         (println "stream2 done."))
 
-(future (doseq [e (filter #(.startsWith % "bla") (event-stream))] (print "stream3:" e)))
+(future (doseq [e (filter #(.startsWith % "bla") (instream))] (print "stream3:" e)))
 
-(future (let [x (nth (event-stream) 3)] (print "future nth (4th event):" x)))
+(future (let [x (nth (instream) 3)] (print "future nth (4th event):" x)))
 
-(future (doseq [x (event-stream #(= % "bla"))] (print "future term:" x)) (println "future term done."))
+(future (doseq [x (instream #(= % "bla"))] (print "future term:" x)) (println "future term done."))
 
 )
 
