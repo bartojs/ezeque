@@ -30,7 +30,8 @@
 
 (defn- start-incoming [connects]
   (println "start-incoming")
-   (future
+  (.start (Thread.
+    (fn []       
      (try 
       (let [sock (ipc/socket @zctx :SUB connects)
             process (fn []
@@ -45,12 +46,13 @@
          (finally (ipc/close sock :SUB connects))) 
         (println "incoming stopped.")
         )
-      (catch Exception e (println "Error in socket :SUB " (pr-str connects) e)))))
+      (catch Exception e (println "Error in socket :SUB " (pr-str connects) e)))))))
 
 (defn- start-outgoing [binds]
   ;; could wait until first send was made before creating a future
   (println "start-outgoing")
-  (future
+  (.start (Thread.
+   (fn []
     (try
       (let [sock (ipc/socket @zctx :PUB binds)]
         (try
@@ -61,7 +63,7 @@
             (ipc/close sock :PUB binds))
           )
        (println "outgoing stopped."))
-     (catch Exception e (println "Error in socket :PUB " (pr-str binds) e)))))
+     (catch Exception e (println "Error in socket :PUB " (pr-str binds) e)))))))
 
 (defn stop []
   (ipc/destroy @zctx))
