@@ -1,9 +1,7 @@
 (ns ezeque.ipc
   (:refer-clojure :exclude [send])
-  (:import [com.sun.jna Native Function Pointer Memory]
-           [java.nio ByteBuffer ByteOrder]))
+  (:import [com.sun.jna Native Function Pointer Memory]))
 
- 
 (defn- invoke [lib func ret & args]
   (.invoke (Function/getFunction lib func) ret (to-array args)))
 

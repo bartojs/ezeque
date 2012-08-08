@@ -29,55 +29,63 @@
 (def zctx (atom nil))
 
 (defn- start-incoming [connects]
-  (println "start-incoming")
-  (.start (Thread.
-    (fn []       
+  (println "start-incoming" (pr-str connects))
+  (future       
      (try 
       (let [sock (ipc/socket @zctx :SUB connects)
             process (fn []
-                      (println "incoming process().")
+                      ;;(println "incoming process().")
                       (let [s (ipc/recv sock)] 
                         (when-not (or (nil? s) (empty? (.trim s)) (= s ":quit"))
-                          (println (str "RECV incoming: '" s "'"))                              
+                          ;;(println (str "RECV incoming: '" s "'"))                              
                           (deliver! (read-string s))
                           true)))]
         (try
-         (while (process) (println "RECV listening..."))
+         (while (process) (print ". "))
          (finally (ipc/close sock :SUB connects))) 
         (println "incoming stopped.")
         )
-      (catch Exception e (println "Error in socket :SUB " (pr-str connects) e)))))))
+      (catch Exception e (println "Error in socket :SUB " (pr-str connects) e)))))
+
+;;TODO: use polling and a control (inproc?) socket to send stop all
+;; (or in/out only) or handle eterm
+;; means we could just have a single future.
+;; the control socket needs to create/close & send in same thread
+;; (inproc needs bind before connect - so might not work)
+;; logging instead of printf (raise events to log instead? - ie create
+;; a logging stream aswell as :incoming :outgoing)
 
 (defn- start-outgoing [binds]
-  ;; could wait until first send was made before creating a future
-  (println "start-outgoing")
-  (.start (Thread.
-   (fn []
+  (println "start-outgoing" (pr-str binds))
+  (future
     (try
       (let [sock (ipc/socket @zctx :PUB binds)]
         (try
           (doseq [ev (outstream :quit)] ;; blocks
-            (println "outstream send " ev)
+            ;;(println "outstream send " ev)
             (ipc/send sock (pr-str ev)))
           (finally
             (ipc/close sock :PUB binds))
           )
        (println "outgoing stopped."))
-     (catch Exception e (println "Error in socket :PUB " (pr-str binds) e)))))))
+     (catch Exception e (println "Error in socket :PUB " (pr-str binds) e)))))
 
 (defn stop []
   (ipc/destroy @zctx))
 
-(defn start [binds connects]
-  (stop)
-  (reset! zctx (ipc/context))
-  
-  (when (seq connects) (start-incoming connects))
-  (when (seq binds) (start-outgoing binds))
-  )
+(defn start
+  ([] (start ["tcp://*:5555"] ["tcp://localhost:5555"]))
+  ([binds connects]
+    (stop)
+    (reset! zctx (ipc/context))
+    (when (seq connects) (start-incoming connects))
+    (when (seq binds) (start-outgoing binds))))
 
 
 (comment
+  ;; set jna.library.path=/path/to/zmq3.2 in project.clj
+  ;; windows need to rename libzmq-v100-mt.dll to zmq.dll 
+  
   ;; producers
   ;; could hook up producers to zeromq for inter process event-processing.
   
