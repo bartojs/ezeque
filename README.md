@@ -5,7 +5,8 @@ ezeque
 
 This is just an experiment with zeromq and processing events via lazy-seqs.
 
-# prerequisites
+prerequisites
+-------------
 
 * You'll need zeromq 3.2 installed on your machine.
 
@@ -13,9 +14,10 @@ This is just an experiment with zeromq and processing events via lazy-seqs.
 
 * (for now) on windows I renamed libzmq-v100-mt.dll to zmq.dll and set jna.library.path=C:\Program Files\ZeroMQ-3.2.0\bin
 
-# example
+example
+-------
 
-Note that Im just using simple pubsub in zmq so this is prone to the slow-subsbriber problem described in the zguide.
+Note that Im just using simple pubsub in zmq so this is prone to the slow-subscriber problem described in the zguide.
 
     git clone https://github.com/bartonj/ezeque.git
     cd ezeque
@@ -49,7 +51,8 @@ Note that Im just using simple pubsub in zmq so this is prone to the slow-subsbr
     ;; run the raise doseq again on the first repl
 
 
-# licences
+licences
+--------
 
 This is my understanding of the licences:
 
