@@ -17,38 +17,37 @@ This is just an experiment with zeromq and processing events via lazy-seqs.
 
 Note that Im just using simple pubsub in zmq so this is prone to the slow-subsbriber problem described in the zguide.
 
-<code>
-git clone https://github.com/bartonj/ezeque.git
-cd ezeque
-lein repl
-;; start pubsub on port 5555
-ezeque.core=> (start)
-...
+    git clone https://github.com/bartonj/ezeque.git
+    cd ezeque
+    lein repl
+    ;; start pubsub on port 5555
+    ezeque.core=> (start)
+    ...
 
-;; test it works
-ezeque.core=> (raise :blabla)
-...
+    ;; test it works
+    ezeque.core=> (raise :blabla)
+    ...
 
-;; start an event consumer that filters on even :myval
-ezeque.core=> (future (doseq [e (filter #(even? (:myval %)) (instream))]
+    ;; start an event consumer that filters on even :myval
+    ezeque.core=> (future (doseq [e (filter #(even? (:myval %)) (instream))]
                         (println "myfilter" (pr-str e))) 
                    (println "myfilter done"))
-...
+    ...
 
-;; raise a whole lot of events to see consumer react
-ezeque.core=> (doseq [i (range 500)] (raise {:myevent :bla :myval i}))
-...
+    ;; raise a whole lot of events to see consumer react
+    ezeque.core=> (doseq [i (range 500)] (raise {:myevent :bla :myval i}))
+    ...
 
-;; you can start another repl subscribe to port 5555
-;; for the same events as above but a different filter
-lein repl
-ezeque.core=> (future (doseq [e (filter #(odd? (:myval %)) (instream))]
+    ;; you can start another repl subscribe to port 5555
+    ;; for the same events as above but a different filter
+    lein repl
+    ezeque.core=> (future (doseq [e (filter #(odd? (:myval %)) (instream))]
                         (println "myfilter" (pr-str e))) 
                    (println "myfilter done"))
-ezeque.core=> (start nil ["tcp://localhost:5555"])
-...
-;; run the raise doseq again on the first repl
-</code>
+    ezeque.core=> (start nil ["tcp://localhost:5555"])
+    ...
+    ;; run the raise doseq again on the first repl
+
 
 # licences
 
