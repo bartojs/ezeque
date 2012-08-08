@@ -19,9 +19,8 @@
     rc))
 
 (defn- memstr [s] (doto (Memory. (inc (count s))) (.setString 0 s false)))
-;;(defn- zmsg [] (-> 32 ByteBuffer/allocateDirect (.order ByteOrder/LITTLE_ENDIAN) Native/getDirectBufferPointer))
-
 (defn- zmsg [] (Memory. 32))
+
 (def sockettypes {:PUB 1 :SUB 2 :REQ 3 :REP 4}) 
 (def socketopts {:SUBSCRIBE 6})
 
@@ -55,14 +54,14 @@
 
 (defn send [sock str]
   (let [msg (zmsg)
-        _ (call :zmq_msg_init_size Integer msg (.longValue (count str)))
-        data (call :zmq_msg_data Pointer msg)
-        sbytes (.getBytes str)]
-    ;;     (.write data (long 0) sbytes 0 (count sbytes))
-    (invoke "c" "memcpy" Void data sbytes (.longValue (count sbytes)))
+        sbytes (.getBytes str)
+        nbytes (.longValue (count sbytes))]
+    (call :zmq_msg_init_size Integer msg nbytes)
+    (doto (call :zmq_msg_data Pointer msg)
+       (.write 0 sbytes 0 nbytes))
     (call :zmq_msg_send Integer msg sock (.intValue 0))
     (call :zmq_msg_close Integer msg)
-  (count sbytes)))
+    nbytes))
 
 (defn recv [sock]
   (let [msg (zmsg)
@@ -70,7 +69,6 @@
         n (call :zmq_msg_recv Integer msg sock (.intValue 0))
         payload (call :zmq_msg_data Pointer msg)
         smsg (String. (.getByteArray payload 0 n))]
-    ;(invoke "c" "free" Void payload)
     (call :zmq_msg_close Integer msg)
     smsg))
 
