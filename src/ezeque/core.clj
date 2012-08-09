@@ -1,8 +1,11 @@
 (ns ezeque.core
+  (:refer-clojure :exclude [emit])
   (:require [ezeque.ipc :as ipc]))
 
 (def streams {:incoming (atom (repeatedly promise))
-              :outgoing (atom (repeatedly promise))})
+              :outgoing (atom (repeatedly promise))
+              :logging (atom (repeatedly promise))
+              })
   
 (defn deliver!
   ([promises event]
@@ -12,6 +15,8 @@
 
 (defn raise [event]
   (deliver! (:outgoing streams) event))
+
+(defn emit [event] (deliver! (:logging streams) event))
 
 (defn event-stream "create a (blocking) event stream as a lazy-seq"
   ([promises]
@@ -25,26 +30,34 @@
 
 (def instream (partial event-stream (:incoming streams)))
 (def outstream (partial event-stream (:outgoing streams)))
+(def logstream (partial event-stream (:logging streams)))
+
+
+(defn start-logging []
+(future (dorun (->> (logstream)
+                    (filter :log)
+                    (map #(format "LOG %1$tFT%1$tT.%1$tL  %2$s" (java.util.Date.) (pr-str %)))
+                    (map println)))))
+
 
 (def zctx (atom nil))
 
 (defn- start-incoming [connects]
-  (println "start-incoming" (pr-str connects))
+  (emit {:site :start-incoming :log (str "start-incoming " (pr-str connects))})
   (future       
      (try 
       (let [sock (ipc/socket @zctx :SUB connects)
             process (fn []
-                      ;;(println "incoming process().")
+                      (emit {:site :start-incoming :log "incoming process"})
                       (let [s (ipc/recv sock)] 
                         (when-not (or (nil? s) (empty? (.trim s)) (= s ":quit"))
-                          ;;(println (str "RECV incoming: '" s "'"))                              
+                          (emit {:site :start-incoming  :log (str "recv '" s "'")})
                           (deliver! (read-string s))
                           true)))]
         (try
-         (while (process) (print ". "))
-         (finally (ipc/close sock :SUB connects))) 
-        (println "incoming stopped.")
-        )
+         (while (process) (print "."))
+         (finally (ipc/close sock :SUB connects)))
+        (emit {:site :start-incoming :log "start-incoming done"}))
       (catch Exception e (println "Error in socket :SUB " (pr-str connects) e)))))
 
 ;;TODO: use polling and a control (inproc?) socket to send stop all
@@ -52,22 +65,20 @@
 ;; means we could just have a single future.
 ;; the control socket needs to create/close & send in same thread
 ;; (inproc needs bind before connect - so might not work)
-;; logging instead of printf (raise events to log instead? - ie create
-;; a logging stream aswell as :incoming :outgoing)
 
 (defn- start-outgoing [binds]
-  (println "start-outgoing" (pr-str binds))
+  (emit {:site :start-outgoing :log (str "start-outgoing " (pr-str binds))})
   (future
     (try
       (let [sock (ipc/socket @zctx :PUB binds)]
         (try
-          (doseq [ev (outstream :quit)] ;; blocks
-            ;;(println "outstream send " ev)
-            (ipc/send sock (pr-str ev)))
+          (doseq [e (outstream :quit)]
+            (emit {:site :start-outgoing :log (str "send " (pr-str e))})
+            (ipc/send sock (pr-str e)))
           (finally
             (ipc/close sock :PUB binds))
           )
-       (println "outgoing stopped."))
+         (emit {:site :start-outgoing :log "start-outgoing done"}))
      (catch Exception e (println "Error in socket :PUB " (pr-str binds) e)))))
 
 (defn stop []
@@ -76,10 +87,11 @@
 (defn start
   ([] (start ["tcp://*:5555"] ["tcp://localhost:5555"]))
   ([binds connects]
-    (stop)
-    (reset! zctx (ipc/context))
-    (when (seq connects) (start-incoming connects))
-    (when (seq binds) (start-outgoing binds))))
+     (start-logging)
+     (stop)
+     (reset! zctx (ipc/context))
+     (when (seq connects) (start-incoming connects))
+     (when (seq binds) (start-outgoing binds))))
 
 
 (comment
