@@ -33,31 +33,34 @@
 (def logstream (partial event-stream (:logging streams)))
 
 
-(defn start-logging []
-(future (dorun (->> (logstream)
-                    (filter :log)
-                    (map #(format "LOG %1$tFT%1$tT.%1$tL  %2$s" (java.util.Date.) (pr-str %)))
-                    (map println)))))
-
+(defn start-logging [level]
+  (future (dorun (->> (logstream)
+                    (filter (comp #{level} :level))
+                    (map #(format "LOG %1$tFT%1$tT.%1$tL [%2$s] - %3$s" (java.util.Date.) (str (:src %)) (str (:log %))))
+                    (map println))))
+  (future (dorun (->> (logstream)
+                        (filter :log)
+                        (map #(format "LOG %1$tFT%1$tT.%1$tL [%2$s] - %3$s" (java.util.Date.) (str (:src %)) (str (:log %))))
+                        (map #(spit (format "%tF.log" (java.util.Date.)) (str "\n" %) :append true))))))
 
 (def zctx (atom nil))
 
 (defn- start-incoming [connects]
-  (emit {:site :start-incoming :log (str "start-incoming " (pr-str connects))})
+  (emit {:src :start-incoming :level :info :log (str "start connect " (pr-str connects))})
   (future       
      (try 
       (let [sock (ipc/socket @zctx :SUB connects)
             process (fn []
-                      (emit {:site :start-incoming :log "incoming process"})
+                      (emit {:src :start-incoming :level :debug :log "listening..."})
                       (let [s (ipc/recv sock)] 
                         (when-not (or (nil? s) (empty? (.trim s)) (= s ":quit"))
-                          (emit {:site :start-incoming  :log (str "recv '" s "'")})
+                          (emit {:src :start-incoming :level :debug :log (str "recv '" s "'")})
                           (deliver! (read-string s))
                           true)))]
         (try
          (while (process) (print "."))
          (finally (ipc/close sock :SUB connects)))
-        (emit {:site :start-incoming :log "start-incoming done"}))
+        (emit {:src :start-incoming :level :info :log "done"}))
       (catch Exception e (println "Error in socket :SUB " (pr-str connects) e)))))
 
 ;;TODO: use polling and a control (inproc?) socket to send stop all
@@ -67,18 +70,18 @@
 ;; (inproc needs bind before connect - so might not work)
 
 (defn- start-outgoing [binds]
-  (emit {:site :start-outgoing :log (str "start-outgoing " (pr-str binds))})
+  (emit {:src :start-outgoing :level :info :log (str "start bind " (pr-str binds))})
   (future
     (try
       (let [sock (ipc/socket @zctx :PUB binds)]
         (try
           (doseq [e (outstream :quit)]
-            (emit {:site :start-outgoing :log (str "send " (pr-str e))})
+            (emit {:src :start-outgoing :level :debug :log (str "send " (pr-str e))})
             (ipc/send sock (pr-str e)))
           (finally
             (ipc/close sock :PUB binds))
           )
-         (emit {:site :start-outgoing :log "start-outgoing done"}))
+         (emit {:src :start-outgoing :level :info :log "done"}))
      (catch Exception e (println "Error in socket :PUB " (pr-str binds) e)))))
 
 (defn stop []
@@ -87,7 +90,7 @@
 (defn start
   ([] (start ["tcp://*:5555"] ["tcp://localhost:5555"]))
   ([binds connects]
-     (start-logging)
+     (start-logging :info)
      (stop)
      (reset! zctx (ipc/context))
      (when (seq connects) (start-incoming connects))
