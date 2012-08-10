@@ -58,7 +58,7 @@
                           (deliver! (read-string s))
                           true)))]
         (try
-         (while (process) (print "."))
+         (while (process) (print ".") (flush))
          (finally (ipc/close sock :SUB connects)))
         (emit {:src :start-incoming :level :info :log "done"}))
       (catch Exception e (println "Error in socket :SUB " (pr-str connects) e)))))
@@ -91,6 +91,7 @@
   ([] (start ["tcp://*:5555"] ["tcp://localhost:5555"]))
   ([binds connects]
      (start-logging :info)
+     (ipc/load-native-lib)
      (stop)
      (reset! zctx (ipc/context))
      (when (seq connects) (start-incoming connects))
@@ -111,18 +112,21 @@
   ;; but thats expected - eg nth is allowed too.
 
   ;; an overall timeout of event processing could be via future-cancel
-  
-(future (doseq [e (take 10 (instream 10000 "x"))] (println "stream1: " e))
-        (println "stream1 done."))
+ 
+(future (doseq [e (take 10 (instream 10000 "x"))] (emit {:src "stream1" :log (pr-str e)})) 
+        (emit {:src "stream1" :log "done."}))
 
-(future (doseq [e (take 10 (instream 10000 "x" #(= % "bla")))] (println "stream2: " e))
-        (println "stream2 done."))
+(future (doseq [e (take 10 (instream 10000 "x" #(= % "bla")))] (emit {:src "stream2" :log (pr-str e)})) 
+        (emit {:src "stream2" :log "done."}))
 
-(future (doseq [e (filter #(.startsWith % "bla") (instream))] (print "stream3:" e)))
+(future (doseq [e (filter #(.startsWith (str %) "bla") (instream))] (emit {:src "stream3" :log (pr-str e)})) 
+        (emit {:src "stream3" :log "done."}))
 
-(future (let [x (nth (instream) 3)] (print "future nth (4th event):" x)))
+(future (let [x (nth (instream) 3)] (emit {:src "future nth" :log (pr-str x)})) 
+        (emit {:src "future nth" :log "done."}))
 
-(future (doseq [x (instream #(= % "bla"))] (print "future term:" x)) (println "future term done."))
+(future (doseq [x (instream #(= % "bla"))] (emit {:src "future term" :log (pr-str x)}))
+        (emit {:src "future term" :log "done."}))
 
 )
 

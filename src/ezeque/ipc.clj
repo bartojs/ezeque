@@ -1,6 +1,27 @@
 (ns ezeque.ipc
   (:refer-clojure :exclude [send])
-  (:import [com.sun.jna Native Function Pointer Memory]))
+  (:require [clojure.java.io :as io])
+  (:import [com.sun.jna Native Function Pointer Memory NativeLibrary] [java.io File]))
+
+
+(defn load-native-lib []
+  (let [arch (.toLowerCase (System/getProperty "os.arch")) 
+        os (.toLowerCase (System/getProperty "os.name"))
+        libmap {"linux" "libzmq.so" "windows" "libzmq.dll"}
+        loc (format "NATIVE/%s/%s/%s" arch os (libmap os))
+        ;;tmp (doto (File/createTempFile "libzmq" ".lib")(.deleteOnExit))
+        dir (System/getProperty "user.dir")
+        lib (io/file dir (libmap os)) 
+        ]
+    (when-not (.exists lib) 
+     (try
+       (with-open [in (.. (Thread/currentThread) (getContextClassLoader) (getResourceAsStream loc))]
+         (io/copy in lib)
+         ;;(System/load (.getAbsolutePath tmp))
+         (NativeLibrary/addSearchPath "zmq"  dir)
+         ;;(.delete tmp)
+         )
+       (catch Exception e (println "cant find " loc))))))
 
 (defn- invoke [lib func ret & args]
   (.invoke (Function/getFunction lib func) ret (to-array args)))
