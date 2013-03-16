@@ -4,10 +4,5 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.4.0"]
-                 [net.java.dev.jna/jna "3.4.0"]
-                 [local/libzmqnative "0.1"]]
-  :jvm-opts [;"-Xdebug"
-             ;"-Xrunjdwp:transport=dt_socket,server=y,suspend=n"
-             ;"-Djna.library.path=/usr/local/lib"
-             ]
+                 [cc.qbits/jilch "0.2.0"]]
   :main ezeque.core)

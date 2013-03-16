@@ -1,63 +1,26 @@
 (ns ezeque.ipc
   (:refer-clojure :exclude [send])
-  (:require [clojure.java.io :as io])
-  (:import [com.sun.jna Native Function Pointer Memory NativeLibrary] [java.io File]))
+  (:require [clojure.java.io :as io] [qbits.jilch.mq :as jilch])
+  )
 
+:: TODO use jilch instead of zmq via jna
 
-(defn load-native-lib []
-  (let [arch (.toLowerCase (System/getProperty "os.arch")) 
-        os (.toLowerCase (System/getProperty "os.name"))
-        libmap {"linux" "libzmq.so" "windows" "libzmq.dll"}
-        loc (format "NATIVE/%s/%s/%s" arch os (libmap os))
-        ;;tmp (doto (File/createTempFile "libzmq" ".lib")(.deleteOnExit))
-        dir (System/getProperty "user.dir")
-        lib (io/file dir (libmap os)) 
-        ]
-    (when-not (.exists lib) 
-     (try
-       (with-open [in (.. (Thread/currentThread) (getContextClassLoader) (getResourceAsStream loc))]
-         (io/copy in lib)
-         ;;(System/load (.getAbsolutePath tmp))
-         (NativeLibrary/addSearchPath "zmq"  dir)
-         ;;(.delete tmp)
-         )
-       (catch Exception e (println "cant find " loc))))))
-
-(defn- invoke [lib func ret & args]
-  (.invoke (Function/getFunction lib func) ret (to-array args)))
-
-(defn zerr [] (let [errno (invoke "zmq" "zmq_errno" Integer)]
-                (str "[" errno "] " (invoke "zmq" "zmq_strerror" String errno))))
-
-(defn- call [func ret & args]
-  (let [rc (apply invoke "zmq" (name func) ret args)]
-    (when (or (and (= Integer ret) (< rc 0))
-              (and (= Pointer ret) (or (nil? rc) (identical? rc Pointer/NULL))))
-      (throw (Exception. (format "Error %d calling zmq/%s %s : %s"
-                                 rc (name func) (pr-str args) (zerr)))))
-    rc))
-
-(defn- memstr [s] (doto (Memory. (inc (count s))) (.setString 0 s false)))
-(defn- zmsg [] (Memory. 32))
-
-(def sockettypes {:PUB 1 :SUB 2 :REQ 3 :REP 4}) 
+(def sockettypes {:PUB jilch/pub :SUB jilch/sub :REQ jilch/req :REP jilch/rep}) 
 (def socketopts {:SUBSCRIBE 6})
 
-(defn context [] (call :zmq_ctx_new Pointer))
-(defn destroy [ctx] (when ctx (call :zmq_ctx_destroy Integer)))
+(defn context [] (jilch/context 1))
+(defn destroy [ctx] (when ctx (.term ctx)))
 
 (defn socket [ctx stype addrs & opts]
-  (let [sock (call :zmq_socket Pointer ctx (.intValue (stype sockettypes)))]
+  (let [sock (jilch/socket ctx (get sockettypes stype))]
     (when (= stype :SUB)
       (let [subfilter (str (:SUBSCRIBE (into {} (map vec (partition 2 opts)))))]
-          (call :zmq_setsockopt Integer sock (.intValue (:SUBSCRIBE socketopts))
-                (memstr subfilter)
-                (.longValue (count subfilter)))))
+          (jilch/subscribe sock subfilter)))
     (cond
-     (#{:SUB :REQ} stype)
-     (doseq [addr addrs] (call :zmq_connect Integer sock addr))
-     (#{:PUB :REP} stype)
-     (doseq [addr addrs] (call :zmq_bind Integer sock addr))
+     (contains? #{:SUB :REQ} stype)
+     (doseq [addr addrs] (jilch/connect sock addr))
+     (contains? #{:PUB :REP} stype)
+     (doseq [addr addrs] (jilch/bind sock addr))
      :else nil)
     sock))
 
