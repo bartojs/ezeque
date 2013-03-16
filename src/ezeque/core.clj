@@ -91,7 +91,6 @@
   ([] (start ["tcp://*:5555"] ["tcp://localhost:5555"]))
   ([binds connects]
      (start-logging :info)
-     (ipc/load-native-lib)
      (stop)
      (reset! zctx (ipc/context))
      (when (seq connects) (start-incoming connects))

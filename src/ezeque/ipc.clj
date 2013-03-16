@@ -1,26 +1,26 @@
 (ns ezeque.ipc
   (:refer-clojure :exclude [send])
-  (:require [clojure.java.io :as io] [qbits.jilch.mq :as jilch])
+  (:require [clojure.java.io :as io]) 
+  (:import [zmq ZMQ SocketBase])
   )
 
-:: TODO use jilch instead of zmq via jna
+(def sockettypes {:PUB ZMQ/ZMQ_PUB :SUB ZMQ/ZMQ_SUB :REQ ZMQ/ZMQ_REQ :REP ZMQ/ZMQ_REP}) 
+(def socketopts {:SUBSCRIBE ZMQ/ZMQ_SUBSCRIBE})
 
-(def sockettypes {:PUB jilch/pub :SUB jilch/sub :REQ jilch/req :REP jilch/rep}) 
-(def socketopts {:SUBSCRIBE 6})
-
-(defn context [] (jilch/context 1))
-(defn destroy [ctx] (when ctx (.term ctx)))
+(defn context [] (ZMQ/zmq_init 1))
+(defn destroy [ctx] (when ctx (ZMQ/zmq_term ctx)))
 
 (defn socket [ctx stype addrs & opts]
-  (let [sock (jilch/socket ctx (get sockettypes stype))]
-    (when (= stype :SUB)
-      (let [subfilter (str (:SUBSCRIBE (into {} (map vec (partition 2 opts)))))]
-          (jilch/subscribe sock subfilter)))
+  (println "socket")
+  (let [sock (ZMQ/zmq_socket ctx (get sockettypes stype))
+        topic (:SUBSCRIBE (map vec (partition 2 opts)))]
+    (when (and (= stype :SUB) topic)
+       (ZMQ/zmq_setsockopt sock (:SUBSCRIBE socketopts) topic))
     (cond
-     (contains? #{:SUB :REQ} stype)
-     (doseq [addr addrs] (jilch/connect sock addr))
-     (contains? #{:PUB :REP} stype)
-     (doseq [addr addrs] (jilch/bind sock addr))
+     (#{:SUB :REQ} stype)
+     (doseq [addr addrs] (ZMQ/zmq_connect sock addr))
+     (#{:PUB :REP} stype)
+     (doseq [addr addrs] (ZMQ/zmq_bind sock addr))
      :else nil)
     sock))
 
@@ -28,30 +28,20 @@
   (when sock
     (cond
        (#{:PUB :REP} stype)
-          (doseq [addr addrs] (call :zmq_unbind Integer sock addr))
+          (doseq [addr addrs] (ZMQ/zmq_unbind sock addr))
        (#{:SUB :REQ} stype)
-          (doseq [addr addrs] (call :zmq_disconnect Integer sock addr))
+          (doseq [addr addrs] (ZMQ/zmq_disconnect sock addr))
      )
-     (call :zmq_close Integer sock)))
+     (ZMQ/zmq_close sock)))
 
 (defn send [sock str]
-  (let [msg (zmsg)
-        sbytes (.getBytes str)
-        nbytes (.longValue (count sbytes))]
-    (call :zmq_msg_init_size Integer msg nbytes)
-    (doto (call :zmq_msg_data Pointer msg)
-       (.write 0 sbytes 0 nbytes))
-    (call :zmq_msg_send Integer msg sock (.intValue 0))
-    (call :zmq_msg_close Integer msg)
-    nbytes))
+  (println "send")
+  (ZMQ/zmq_send sock ^String str 0)
+  (count str))
 
-(defn recv [sock]
-  (let [msg (zmsg)
-        _ (call :zmq_msg_init Integer msg)
-        n (call :zmq_msg_recv Integer msg sock (.intValue 0))
-        payload (call :zmq_msg_data Pointer msg)
-        smsg (String. (.getByteArray payload 0 n))]
-    (call :zmq_msg_close Integer msg)
-    smsg))
+(defn recv [sock] 
+  (println "recv")
+  (if-let [msg (ZMQ/zmq_recv sock 0)]
+    (String. (.data msg))))
 
 
