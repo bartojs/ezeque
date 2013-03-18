@@ -10,12 +10,11 @@
 (defn context [] (ZMQ/zmq_init 1))
 (defn destroy [ctx] (when ctx (ZMQ/zmq_term ctx)))
 
-(defn socket [ctx stype addrs & opts]
+(defn socket [ctx stype addrs & {:as opts}]
   (println "socket")
-  (let [sock (ZMQ/zmq_socket ctx (get sockettypes stype))
-        topic (:SUBSCRIBE (map vec (partition 2 opts)))]
-    (when (and (= stype :SUB) topic)
-       (ZMQ/zmq_setsockopt sock (:SUBSCRIBE socketopts) topic))
+  (let [sock (ZMQ/zmq_socket ctx (get sockettypes stype))]
+    (when (= stype :SUB)
+       (ZMQ/zmq_setsockopt sock (:SUBSCRIBE socketopts) (str (:SUBSCRIBE opts))))
     (cond
      (#{:SUB :REQ} stype)
      (doseq [addr addrs] (ZMQ/zmq_connect sock addr))
